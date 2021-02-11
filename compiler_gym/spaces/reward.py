@@ -2,12 +2,12 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 
 from compiler_gym.service import observation_t
-from compiler_gym.spaces import Scalar
+from compiler_gym.spaces.scalar import Scalar
 
 
 class RewardSpace(Scalar):
@@ -17,14 +17,22 @@ class RewardSpace(Scalar):
         default_value: float = False,
         min: Optional[float] = None,
         max: Optional[float] = None,
-        success_threshold: Optional[float] = None,
         default_negates_returns: bool = False,
+        success_threshold: Optional[float] = None,
+        deterministic: bool = False,
+        platform_dependent: bool = True,
     ):
-        super().__init__(min=min, max=max, dtype=np.float64)
+        super().__init__(
+            min=-np.inf if min is None else min,
+            max=np.inf if max is None else max,
+            dtype=np.float64,
+        )
         self.id = id
         self.default_value: float = default_value
         self.default_negates_returns: bool = default_negates_returns
-        # TODO: deterministic / platform specific
+        self.success_threshold = success_threshold
+        self.deterministic = deterministic
+        self.platform_dependent = platform_dependent
 
     def reset(self) -> None:
         raise NotImplementedError("abstract class")
@@ -49,6 +57,13 @@ class RewardSpace(Scalar):
         else:
             return self.default_value
 
+    @property
+    def range(self) -> Tuple[float, float]:
+        return (self.min, self.max)
+
+    def __repr__(self):
+        return self.id
+
 
 class CostFunctionRewardSpace(RewardSpace):
     def __init__(self, cost_function: str, init_cost_function: str, **kwargs):
@@ -69,7 +84,7 @@ class CostFunctionRewardSpace(RewardSpace):
             self.previous_cost = get_cost(self.init_cost_function)
         reward = self.previous_cost - cost
         self.previous_cost = cost
-        return reward
+        return float(reward)
 
 
 class NormalizedRewardSpace(CostFunctionRewardSpace):
@@ -85,10 +100,10 @@ class NormalizedRewardSpace(CostFunctionRewardSpace):
         self, get_cost: Callable[[str], float], cost: observation_t = None
     ) -> float:
         if self.cost_norm is None:
-            self.cost_norm = self.cost_norm(get_cost)
+            self.cost_norm = self.get_cost_norm(get_cost)
         return super().update(get_cost, cost) / self.cost_norm
 
-    def cost_norm(self, get_cost: Callable[[str], float]) -> float:
+    def get_cost_norm(self, get_cost: Callable[[str], float]) -> float:
         return get_cost(self.init_cost_function)
 
 
@@ -97,7 +112,7 @@ class BaselineImprovementNormalizedRewardSpace(NormalizedRewardSpace):
         super().__init__(**kwargs)
         self.baseline_cost_function = baseline_cost_function
 
-    def cost_norm(self, get_cost: Callable[[str], float]) -> float:
+    def get_cost_norm(self, get_cost: Callable[[str], float]) -> float:
         init_cost = get_cost(self.init_cost_function)
         baseline_cost = get_cost(self.baseline_cost_function)
         return min(init_cost - baseline_cost, 1)

@@ -640,7 +640,7 @@ class CompilerEnv(gym.Env):
                     f"Requested {self._requested_eager_observation_indices} eager observations "
                     f"but received {len(reply.observation)}"
                 )
-            return self.observation[self.observation_space.cb(reply.observation[0])]
+            return self.observation_space.cb(reply.observation[0])
 
     def step(self, action: int) -> step_t:
         """Take a step.
@@ -681,7 +681,10 @@ class CompilerEnv(gym.Env):
             observation = self.observation_space.cb(reply.observation[0])
         if self._eager_reward:
             reward = self.reward_space.update(
-                self.observation.__getitem__, reply.observation[-1]
+                self.observation.__getitem__,
+                self.observation.spaces[self.reward_space.cost_function].cb(
+                    reply.observation[-1]
+                ),
             )
             self.episode_reward += reward
 
