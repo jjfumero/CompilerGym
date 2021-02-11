@@ -21,6 +21,7 @@ class RewardSpace(Scalar):
         success_threshold: Optional[float] = None,
         deterministic: bool = False,
         platform_dependent: bool = True,
+        cb: Callable[["CompilerEnv"], float] = None,  # noqa: F821
     ):
         super().__init__(
             min=-np.inf if min is None else min,
@@ -33,6 +34,7 @@ class RewardSpace(Scalar):
         self.success_threshold = success_threshold
         self.deterministic = deterministic
         self.platform_dependent = platform_dependent
+        self.cb = cb
 
     def reset(self) -> None:
         raise NotImplementedError("abstract class")
@@ -40,7 +42,7 @@ class RewardSpace(Scalar):
     def update(
         self, get_cost: Callable[[str], float], cost: observation_t = None
     ) -> float:
-        raise NotImplementedError("abstract class")
+        return self.cb(None)
 
     def reward_on_error(self, episode_reward: float) -> float:
         """Return the reward value for an error condition.

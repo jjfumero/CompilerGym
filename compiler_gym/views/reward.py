@@ -29,8 +29,6 @@ class RewardView(object):
         spaces: List[RewardSpace],
         get_cost: Optional[Callable[[str], None]] = None,
     ):
-        if not spaces:
-            raise ValueError("No reward spaces")
         self.spaces: Dict[str, RewardSpace] = {s.id: s for s in spaces}
         self.get_cost = get_cost
 
@@ -41,13 +39,15 @@ class RewardView(object):
         :return: A reward.
         :raises KeyError: If the requested reward space does not exist.
         """
+        if not self.spaces:
+            raise ValueError("No reward spaces")
         return self.spaces[reward_space].update(self.get_cost)
 
     def reset(self) -> None:
         for space in self.spaces:
             space.reset()
 
-    def add_space(self, name: str, space: RewardSpace) -> None:
-        if name in self.spaces:
-            warnings.warn(f"Replacing existing reward space '{name}'")
-        self.spaces[name] = space
+    def add_space(self, space: RewardSpace) -> None:
+        if space.id in self.spaces:
+            warnings.warn(f"Replacing existing reward space '{space.id}'")
+        self.spaces[space.id] = space

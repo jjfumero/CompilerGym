@@ -64,27 +64,10 @@ Status LlvmService::StartEpisode(ServerContext* /* unused */, const StartEpisode
   LlvmActionSpace actionSpace;
   RETURN_IF_ERROR(util::intToEnum(request->action_space(), &actionSpace));
 
-  // Set the eager observation space.
-  std::vector<LlvmObservationSpace> eagerObservationSpaces;
-  eagerObservationSpaces.reserve(request->eager_observation_space_size());
-  for (int i = 0; i < request->eager_observation_space_size(); ++i) {
-    const int32_t index = request->eager_observation_space(i);
-    LlvmObservationSpace space;
-    RETURN_IF_ERROR(util::intToEnum<LlvmObservationSpace>(index, &space));
-    eagerObservationSpaces.push_back(space);
-  }
-
   // Construct the environment.
   reply->set_session_id(nextSessionId_);
-  sessions_[nextSessionId_] = std::make_unique<LlvmEnvironment>(
-      std::move(benchmark), actionSpace, eagerObservationSpaces, workingDirectory_);
-
-  // Compute the initial eager observations.
-  for (const auto eagerObservationSpace : eagerObservationSpaces) {
-    auto observation = reply->add_observation();
-    RETURN_IF_ERROR(sessions_[nextSessionId_]->getObservation(eagerObservationSpace, observation));
-  }
-
+  sessions_[nextSessionId_] =
+      std::make_unique<LlvmEnvironment>(std::move(benchmark), actionSpace, workingDirectory_);
   ++nextSessionId_;
 
   return Status::OK;
@@ -105,32 +88,13 @@ Status LlvmService::EndEpisode(grpc::ServerContext* /* unused */, const EndEpiso
   return Status::OK;
 }
 
-Status LlvmService::TakeAction(ServerContext* /* unused */, const ActionRequest* request,
-                               ActionReply* reply) {
+Status LlvmService::Step(ServerContext* /* unused */, const StepRequest* request,
+                         StepReply* reply) {
   LlvmEnvironment* environment;
   RETURN_IF_ERROR(session(request->session_id(), &environment));
 
-  // Nothing was requested.
-  if (!request->action_size()) {
-    VLOG(2) << "Step " << environment->actionCount() << " TakeAction()";
-    return Status::OK;
-  }
-
-  VLOG(2) << "Step " << environment->actionCount() << " TakeAction(" << request->action(0) << ")";
-  return environment->takeAction(*request, reply);
-}
-
-Status LlvmService::GetObservation(ServerContext* /* unused */, const ObservationRequest* request,
-                                   Observation* reply) {
-  LlvmEnvironment* environment;
-  RETURN_IF_ERROR(session(request->session_id(), &environment));
-
-  const int32_t index = request->observation_space();
-  VLOG(2) << "Step " << environment->actionCount() << " GetObservation(" << index << ")";
-
-  LlvmObservationSpace space;
-  RETURN_IF_ERROR(util::intToEnum(index, &space));
-  return environment->getObservation(space, reply);
+  VLOG(2) << "Step " << environment->actionCount() << " Step()";
+  return environment->step(*request, reply);
 }
 
 Status LlvmService::AddBenchmark(ServerContext* /* unused */, const AddBenchmarkRequest* request,

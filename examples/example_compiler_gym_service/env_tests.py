@@ -58,7 +58,7 @@ def test_reward_spaces(env: CompilerEnv):
     assert env.reward.spaces.keys() == {"codesize"}
 
 
-def test_takeAction_before_startEpisode(env: CompilerEnv):
+def test_step_before_startEpisode(env: CompilerEnv):
     """Taking a step() before reset() is illegal."""
     with pytest.raises(Exception):
         env.step(0)
@@ -107,7 +107,7 @@ def test_double_reset(env: CompilerEnv):
     assert env.in_episode
 
 
-def test_takeAction_out_of_range(env: CompilerEnv):
+def test_Step_out_of_range(env: CompilerEnv):
     """Test error handling with an invalid action."""
     env.reset()
     with pytest.raises(ValueError) as ctx:

@@ -35,15 +35,10 @@ class LlvmEnvironment {
   // Construct an environment by taking ownership of a benchmark. Throws
   // std::invalid_argument if the benchmark's LLVM module fails verification.
   LlvmEnvironment(std::unique_ptr<Benchmark> benchmark, LlvmActionSpace actionSpace,
-                  const std::vector<LlvmObservationSpace>& eagerObservationSpaces,
                   const boost::filesystem::path& workingDirectory);
 
-  // Run the requested action(s), then compute eager observation and reward, if
-  // required.
-  [[nodiscard]] grpc::Status takeAction(const ActionRequest& request, ActionReply* reply);
-
-  // Compute the requested observation.
-  [[nodiscard]] grpc::Status getObservation(LlvmObservationSpace space, Observation* reply);
+  // Run the requested action(s) then compute the eager observation(s).
+  [[nodiscard]] grpc::Status step(const StepRequest& request, StepReply* reply);
 
   inline const Benchmark& benchmark() const { return *benchmark_; }
 
@@ -51,11 +46,14 @@ class LlvmEnvironment {
 
  protected:
   // Run the requested action.
-  [[nodiscard]] grpc::Status runAction(LlvmAction action, ActionReply* reply);
+  [[nodiscard]] grpc::Status runAction(LlvmAction action, StepReply* reply);
+
+  // Compute the requested observation.
+  [[nodiscard]] grpc::Status getObservation(LlvmObservationSpace space, Observation* reply);
 
   // Run the given pass, possibly modifying the underlying LLVM module.
-  void runPass(llvm::Pass* pass, ActionReply* reply);
-  void runPass(llvm::FunctionPass* pass, ActionReply* reply);
+  void runPass(llvm::Pass* pass, StepReply* reply);
+  void runPass(llvm::FunctionPass* pass, StepReply* reply);
 
   // Run the commandline `opt` tool on the current LLVM module with the given
   // arguments, replacing the environment state with the generated output.
@@ -64,10 +62,6 @@ class LlvmEnvironment {
   inline Benchmark& benchmark() { return *benchmark_; }
 
   inline const LlvmActionSpace actionSpace() const { return actionSpace_; }
-
-  inline const std::vector<LlvmObservationSpace>& eagerObservationSpaces() const {
-    return eagerObservationSpaces_;
-  }
 
   inline const llvm::TargetLibraryInfoImpl& tlii() const { return tlii_; }
 
@@ -84,7 +78,6 @@ class LlvmEnvironment {
   const boost::filesystem::path workingDirectory_;
   const std::unique_ptr<Benchmark> benchmark_;
   const LlvmActionSpace actionSpace_;
-  const std::vector<LlvmObservationSpace> eagerObservationSpaces_;
   const llvm::TargetLibraryInfoImpl tlii_;
   const programl::ProgramGraphOptions programlOptions_;
 

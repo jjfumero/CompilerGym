@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 """This module demonstrates how to """
+from compiler_gym.spaces import RewardSpace
 from compiler_gym.util.registration import register
 from compiler_gym.util.runfiles_path import runfiles_path
 
@@ -15,5 +16,6 @@ register(
         "service": runfiles_path(
             "examples/example_compiler_gym_service/service/compiler_gym-example-service"
         ),
+        "rewards": [RewardSpace(id="codesize", cb=lambda env: 0)],
     },
 )

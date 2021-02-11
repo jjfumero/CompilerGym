@@ -118,12 +118,10 @@ Status writeBitcodeToFile(const llvm::Module& module, const fs::path& path) {
 }  // anonymous namespace
 
 LlvmEnvironment::LlvmEnvironment(std::unique_ptr<Benchmark> benchmark, LlvmActionSpace actionSpace,
-                                 const std::vector<LlvmObservationSpace>& eagerObservationSpaces,
                                  const boost::filesystem::path& workingDirectory)
     : workingDirectory_(workingDirectory),
       benchmark_(std::move(benchmark)),
       actionSpace_(actionSpace),
-      eagerObservationSpaces_(eagerObservationSpaces.begin(), eagerObservationSpaces.end()),
       tlii_(getTargetLibraryInfo(benchmark_->module())),
       actionCount_(0) {
   // Initialize LLVM.
@@ -145,7 +143,8 @@ LlvmEnvironment::LlvmEnvironment(std::unique_ptr<Benchmark> benchmark, LlvmActio
   CHECK(verifyModuleStatus(benchmark_->module()).ok());
 }
 
-Status LlvmEnvironment::takeAction(const ActionRequest& request, ActionReply* reply) {
+Status LlvmEnvironment::step(const StepRequest& request, StepReply* reply) {
+  // Apply the requested actions.
   actionCount_ += request.action_size();
   switch (actionSpace()) {
     case LlvmActionSpace::PASSES_ALL:
@@ -159,16 +158,18 @@ Status LlvmEnvironment::takeAction(const ActionRequest& request, ActionReply* re
   // Fail now if we have broken something.
   RETURN_IF_ERROR(verifyModuleStatus(benchmark().module()));
 
-  // Compute the eager observations.
-  for (const auto eagerObservationSpace : eagerObservationSpaces()) {
+  // Compute the requested observations.
+  for (int i = 0; i < request.observation_space_size(); ++i) {
+    LlvmObservationSpace observationSpace;
+    RETURN_IF_ERROR(util::intToEnum(request.observation_space(i), &observationSpace));
     auto observation = reply->add_observation();
-    RETURN_IF_ERROR(getObservation(eagerObservationSpace, observation));
+    RETURN_IF_ERROR(getObservation(observationSpace, observation));
   }
 
   return Status::OK;
 }
 
-Status LlvmEnvironment::runAction(LlvmAction action, ActionReply* reply) {
+Status LlvmEnvironment::runAction(LlvmAction action, StepReply* reply) {
 #ifdef EXPERIMENTAL_UNSTABLE_GVN_SINK_PASS
   // NOTE(https://github.com/facebookresearch/CompilerGym/issues/46): The
   // -gvn-sink pass has been found to have nondeterministic behavior so has
@@ -189,7 +190,7 @@ Status LlvmEnvironment::runAction(LlvmAction action, ActionReply* reply) {
   return Status::OK;
 }
 
-void LlvmEnvironment::runPass(llvm::Pass* pass, ActionReply* reply) {
+void LlvmEnvironment::runPass(llvm::Pass* pass, StepReply* reply) {
   llvm::legacy::PassManager passManager;
   setupPassManager(&passManager, pass);
 
@@ -197,7 +198,7 @@ void LlvmEnvironment::runPass(llvm::Pass* pass, ActionReply* reply) {
   reply->set_action_had_no_effect(!changed);
 }
 
-void LlvmEnvironment::runPass(llvm::FunctionPass* pass, ActionReply* reply) {
+void LlvmEnvironment::runPass(llvm::FunctionPass* pass, StepReply* reply) {
   llvm::legacy::FunctionPassManager passManager(&benchmark().module());
   setupPassManager(&passManager, pass);
 

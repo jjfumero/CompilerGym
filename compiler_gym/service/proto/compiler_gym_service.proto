@@ -19,12 +19,8 @@ service CompilerGymService {
   // Start a CompilerGym service episode. Must be called after Init().
   rpc StartEpisode(StartEpisodeRequest) returns (StartEpisodeReply);
   // Make an optimization decision. The set of valid actions is the last
-  // ActionSpace returned by a call to Init() or TakeAction().
-  rpc TakeAction(ActionRequest) returns (ActionReply);
-  // Request an observation of the current state. StartEpisode() must have been
-  // called. If the observation is deterministic, this value will not change
-  // until further TakeAction() calls are made.
-  rpc GetObservation(ObservationRequest) returns (Observation);
+  // ActionSpace returned by a call to Init() or Step().
+  rpc Step(StepRequest) returns (StepReply);
   // End a CompilerGym service episode. Must be called after StartEpisode().
   rpc EndEpisode(EndEpisodeRequest) returns (EndEpisodeReply);
   // Request the supported service spaces. The service responds with an initial
@@ -59,13 +55,6 @@ message StartEpisodeRequest {
   // that is to be used for this episode. Once set, the action space cannot
   // be changed for the duration of the episode.
   int32 action_space = 2;
-  // Enable eager computation of the given observation spaces. When set, every
-  // call to TakeAction() will return an observation from the space indicated by
-  // the index into InitReply.observation_space_list of this list. For example,
-  // given StartEpisodeRequest.eager_observation_space = [0, 2, 3], TakeAction()
-  // will return an ActionReply.observation of three observations: the first,
-  // third, and fourth observation spaces.
-  repeated int32 eager_observation_space = 3;
 }
 
 message StartEpisodeReply {
@@ -84,7 +73,40 @@ message StartEpisodeReply {
 }
 
 // ===========================================================================
-// TakeAction().
+// Step().
+
+message StepRequest {
+  // The ID of the session.
+  int64 session_id = 1;
+  // A list of indices into the ActionSpace.action list. Actions are executed
+  // in the order they appear in this list.
+  repeated int32 action = 2;
+  // A list of indices into the GetSpacesReply.observation_space_list
+  repeated int32 observation_space = 3;
+}
+
+message StepReply {
+  // Indicates that the episode has ended. This could be because there are no
+  // further actions that can be made, or because the action has led to an
+  // invalid state. Once this field has been set, you should make no further
+  // calls to step(). However, you mays still request reward and new
+  // observations.
+  bool end_of_episode = 1;
+  // A service may set this field to true if the action is known not to have
+  // any effect. This allows an agent to assume that observations or rewards
+  // computed before this action remain valid, providing that they are
+  // deterministic.
+  bool action_had_no_effect = 2;
+  // A new action space. This field is set if, as a result of running the
+  // requested action, the action space has changed. Else, the action space
+  // remains unchanged.
+  ActionSpace new_action_space = 3;
+  // Observed states after completing the action.
+  repeated Observation observation = 4;
+}
+
+// ===========================================================================
+// Actions.
 
 message ActionSpace {
   // The name of the action space.
@@ -99,37 +121,8 @@ message ActionSpace {
   repeated int32 observation_space = 3;
 }
 
-message ActionRequest {
-  // The ID of the session.
-  int64 session_id = 1;
-  // A list of indices into the ActionSpace.action list. Actions are executed
-  // in the order they appear in this list.
-  repeated int32 action = 2;
-}
-
-message ActionReply {
-  // Indicates that the episode has ended. This could be because there are no
-  // further actions that can be made, or because the action has led to an
-  // invalid state. Once this field has been set, you should make no further
-  // calls to takeAction(). However, you mays still request reward and new
-  // observations.
-  bool end_of_episode = 1;
-  // A service may set this field to true if the action is known not to have
-  // any effect. This allows an agent to assume that observations or rewards
-  // computed before this action remain valid, providing that they are
-  // deterministic.
-  bool action_had_no_effect = 2;
-  // A new action space. This field is set if, as a result of running the
-  // requested action, the action space has changed. Else, the action space
-  // remains unchanged.
-  ActionSpace new_action_space = 3;
-  // Observed states after completing the action. Set only if
-  // StartEpisodeRequest.eager_observation_space was set during startEpisode().
-  repeated Observation observation = 4;
-}
-
 // ===========================================================================
-// GetObservation().
+// Observations.
 
 message Observation {
   // A point in an ObservationSpace is _either_ a vector of integers, a vector
@@ -202,13 +195,6 @@ message ObservationSpace {
   Observation default_value = 9;
 }
 
-message ObservationRequest {
-  // The ID of the session.
-  int64 session_id = 1;
-  // Index into the InitReply.observation_space_list.
-  int32 observation_space = 2;
-}
-
 // ===========================================================================
 // EndEpisode().
 
@@ -225,7 +211,7 @@ message EndEpisodeReply {}
 message GetSpacesRequest {}
 
 message GetSpacesReply {
-  // The initial space of actions. Subsequent calls to takeAction() may produce
+  // The initial space of actions. Subsequent calls to step() may produce
   // a new action space.
   repeated ActionSpace action_space_list = 1;
   // A list of available observation spaces. A service may support one or more

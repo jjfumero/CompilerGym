@@ -11,14 +11,19 @@ from compiler_gym.service.proto import (
     DoubleList,
     Int64List,
     Observation,
-    ObservationRequest,
     ObservationSpace,
     ScalarLimit,
     ScalarRange,
     ScalarRangeList,
+    StepRequest,
 )
 from compiler_gym.views import ObservationView
 from tests.test_main import main
+
+
+class MockGetObservationReply(object):
+    def __init__(self, value):
+        self.observation = [value]
 
 
 class MockGetObservation(object):
@@ -28,11 +33,11 @@ class MockGetObservation(object):
         self.called_observation_spaces = []
         self.ret = list(reversed(ret or []))
 
-    def __call__(self, request: ObservationRequest):
-        self.called_observation_spaces.append(request.observation_space)
+    def __call__(self, request: StepRequest):
+        self.called_observation_spaces.append(request.observation_space[0])
         ret = self.ret[-1]
         del self.ret[-1]
-        return ret
+        return MockGetObservationReply(ret)
 
 
 def test_empty_space():
