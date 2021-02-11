@@ -50,3 +50,27 @@ Commandline
 
 .. autoclass:: CommandlineFlag
    :members:
+
+
+RewardSpaces
+-------------
+
+.. autoclass:: RewardSpace
+   :members:
+
+   .. automethod:: __init__
+
+.. autoclass:: CostFunctionRewardSpace
+   :members:
+
+   .. automethod:: __init__
+
+.. autoclass:: NormalizedRewardSpace
+   :members:
+
+   .. automethod:: __init__
+
+.. autoclass:: BaselineImprovementNormalizedRewardSpace
+   :members:
+
+   .. automethod:: __init__

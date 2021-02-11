@@ -36,13 +36,8 @@ from compiler_gym.service.proto import (
     GetVersionRequest,
     StartEpisodeRequest,
 )
-from compiler_gym.spaces import NamedDiscrete
-from compiler_gym.views import (
-    ObservationSpaceSpec,
-    ObservationView,
-    RewardSpaceSpec,
-    RewardView,
-)
+from compiler_gym.spaces import NamedDiscrete, RewardSpace
+from compiler_gym.views import ObservationSpaceSpec, ObservationView, RewardView
 
 # Type hints.
 info_t = Dict[str, Any]
@@ -202,7 +197,7 @@ class CompilerEnv(gym.Env):
         service: Union[str, Path],
         benchmark: Optional[Union[str, Benchmark]] = None,
         observation_space: Optional[Union[str, ObservationSpaceSpec]] = None,
-        reward_space: Optional[Union[str, RewardSpaceSpec]] = None,
+        reward_space: Optional[Union[str, RewardSpace]] = None,
         action_space: Optional[str] = None,
         connection_settings: Optional[ConnectionOpts] = None,
     ):
@@ -227,7 +222,7 @@ class CompilerEnv(gym.Env):
             :class:`env.observation.spaces <compiler_gym.views.ObservationView>`.
         :param reward_space: Compute and return reward at each :func:`step()`
             from this space. Accepts a string name or a
-            :class:`RewardSpaceSpec <compiler_gym.views.RewardSpaceSpec>`. If
+            :class:`RewardSpace <compiler_gym.spaces.RewardSpace>`. If
             not provided, :func:`step()` returns :code:`None` for the reward
             value. Can be set later using
             :meth:`env.reward_space <compiler_gym.envs.CompilerEnv.reward_space>`.
@@ -241,6 +236,10 @@ class CompilerEnv(gym.Env):
             within the parameters provided in :code:`connection_settings`.
         """
         self.metadata = {"render.modes": ["human", "ansi"]}
+
+        # A compiler service supports multiple simultaneous environments. This
+        # session ID is used to identify this environment.
+        self._session_id: Optional[int] = None
 
         self._service_endpoint: Union[str, Path] = service
         self._connection_settings = connection_settings or ConnectionOpts()
@@ -274,17 +273,10 @@ class CompilerEnv(gym.Env):
             ),
             spaces=self.service.observation_spaces,
         )
-        self.reward = self._reward_view_type(
-            get_reward=lambda req: self.service(self.service.stub.GetReward, req),
-            spaces=self.service.reward_spaces,
-        )
+        self.reward = self._reward_view_type(self.get_reward_spaces())
 
         # Lazily evaluated version strings.
         self._versions: Optional[GetVersionReply] = None
-
-        # A compiler service supports multiple simultaneous environments. This
-        # session ID is used to identify this environment.
-        self._session_id: Optional[int] = None
 
         # Mutable state initialized in reset().
         self.action_space: Optional[Space] = None
@@ -294,10 +286,14 @@ class CompilerEnv(gym.Env):
         self.episode_start_time: float = time()
 
         # Initialize eager observation/reward.
+        self._requested_eager_observation_indices: List[int] = []
         self._eager_observation_space: Optional[ObservationSpaceSpec] = None
-        self._eager_reward_space: Optional[RewardSpaceSpec] = None
+        self._eager_reward_space: Optional[RewardSpace] = None
         self.observation_space = observation_space
         self.reward_space = reward_space
+
+    def get_reward_spaces(self) -> List[RewardSpace]:
+        return []
 
     @property
     def versions(self) -> GetVersionReply:
@@ -422,11 +418,11 @@ class CompilerEnv(gym.Env):
             raise TypeError(f"Unsupported benchmark type: {type(benchmark).__name__}")
 
     @property
-    def reward_space(self) -> Optional[RewardSpaceSpec]:
+    def reward_space(self) -> Optional[RewardSpace]:
         """The eager reward space. This is the reward that is returned by
         :func:`~step()`.
 
-        :getter: Returns a :class:`RewardSpaceSpec <compiler_gym.views.RewardSpaceSpec>`,
+        :getter: Returns a :class:`RewardSpace <compiler_gym.spaces.RewardSpace>`,
             or :code:`None` if not set.
         :setter: Set the eager reward space.
 
@@ -437,14 +433,12 @@ class CompilerEnv(gym.Env):
         return self._eager_reward_space
 
     @reward_space.setter
-    def reward_space(self, reward_space: Optional[Union[str, RewardSpaceSpec]]) -> None:
+    def reward_space(self, reward_space: Optional[Union[str, RewardSpace]]) -> None:
         if isinstance(reward_space, str) and reward_space not in self.reward.spaces:
             raise LookupError(f"Reward space not found: {reward_space}")
 
         reward_space_name = (
-            reward_space.id
-            if isinstance(reward_space, RewardSpaceSpec)
-            else reward_space
+            reward_space.id if isinstance(reward_space, RewardSpace) else reward_space
         )
 
         if self.in_episode:
@@ -453,10 +447,13 @@ class CompilerEnv(gym.Env):
             )
 
         self._eager_reward: bool = reward_space is not None
-        self._eager_reward_space: Optional[RewardSpaceSpec] = None
+        self._eager_reward_space: Optional[RewardSpace] = None
         if self._eager_reward:
             self._eager_reward_space = self.reward.spaces[reward_space_name]
-            self.reward_range = self._eager_reward_space.range
+            self.reward_range = (
+                self._eager_reward_space.min,
+                self._eager_reward_space.max,
+            )
         else:
             self.reward_range = (-np.inf, np.inf)
 
@@ -587,6 +584,16 @@ class CompilerEnv(gym.Env):
         if benchmark:
             self.benchmark = benchmark
 
+        self._requested_eager_observation_indices = []
+        if self.observation_space:
+            self._requested_eager_observation_indices.append(
+                self.observation_space.index
+            )
+        if self.reward_space:
+            self._requested_eager_observation_indices.append(
+                self.observation.spaces[self.reward_space.cost_function].index
+            )
+
         try:
             reply = self.service(
                 self.service.stub.StartEpisode,
@@ -599,14 +606,7 @@ class CompilerEnv(gym.Env):
                         if self.action_space_name
                         else 0
                     ),
-                    use_eager_observation_space=self._eager_observation,
-                    eager_observation_space=(
-                        self.observation_space.index if self.observation_space else None
-                    ),
-                    use_eager_reward_space=bool(self.reward_space),
-                    eager_reward_space=(
-                        self.reward_space.index if self.reward_space else None
-                    ),
+                    eager_observation_space=self._requested_eager_observation_indices,
                 ),
             )
         except (ServiceError, ServiceTransportError):
@@ -622,7 +622,7 @@ class CompilerEnv(gym.Env):
         self._benchmark_in_use_uri = reply.benchmark
         self._session_id = reply.session_id
         self.observation.session_id = reply.session_id
-        self.reward.session_id = reply.session_id
+        self.reward.get_cost = self.observation.__getitem__
         self.episode_start_time = time()
 
         # If the action space has changed, update it.
@@ -635,7 +635,12 @@ class CompilerEnv(gym.Env):
             self.episode_reward = 0
 
         if self._eager_observation:
-            return self.observation[self.observation_space.id]
+            if len(reply.observation) != len(self._requested_eager_observation_indices):
+                raise ServiceError(
+                    f"Requested {self._requested_eager_observation_indices} eager observations "
+                    f"but received {len(reply.observation)}"
+                )
+            return self.observation[self.observation_space.cb(reply.observation[0])]
 
     def step(self, action: int) -> step_t:
         """Take a step.
@@ -660,6 +665,12 @@ class CompilerEnv(gym.Env):
                 observation = self.observation_space.default_value
             return observation, reward, True, info
 
+        if len(reply.observation) != len(self._requested_eager_observation_indices):
+            raise ServiceError(
+                f"Requested {self._requested_eager_observation_indices} eager observations "
+                f"but received {len(reply.observation)}"
+            )
+
         # If the action space has changed, update it.
         if reply.HasField("new_action_space"):
             self.action_space = self._make_action_space(
@@ -667,9 +678,11 @@ class CompilerEnv(gym.Env):
             )
 
         if self.observation_space:
-            observation = self.observation_space.cb(reply.observation)
+            observation = self.observation_space.cb(reply.observation[0])
         if self._eager_reward:
-            reward = reply.reward.reward
+            reward = self.reward_space.update(
+                self.observation.__getitem__, reply.observation[-1]
+            )
             self.episode_reward += reward
 
         info = {

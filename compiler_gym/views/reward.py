@@ -2,10 +2,10 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-from typing import Callable, List
+import warnings
+from typing import Callable, Dict, List, Optional
 
-from compiler_gym.service.proto import Reward, RewardRequest, RewardSpace
-from compiler_gym.views.reward_space_spec import RewardSpaceSpec
+from compiler_gym.spaces import RewardSpace
 
 
 class RewardView(object):
@@ -26,16 +26,13 @@ class RewardView(object):
 
     def __init__(
         self,
-        get_reward: Callable[[RewardRequest], Reward],
         spaces: List[RewardSpace],
+        get_cost: Optional[Callable[[str], None]] = None,
     ):
-        self._get_reward = get_reward
-        self.session_id = -1
-
         if not spaces:
             raise ValueError("No reward spaces")
-
-        self.spaces = {s.name: RewardSpaceSpec(i, s) for i, s in enumerate(spaces)}
+        self.spaces: Dict[str, RewardSpace] = {s.id: s for s in spaces}
+        self.get_cost = get_cost
 
     def __getitem__(self, reward_space: str) -> float:
         """Request an observation from the given space.
@@ -44,7 +41,13 @@ class RewardView(object):
         :return: A reward.
         :raises KeyError: If the requested reward space does not exist.
         """
-        request = RewardRequest(
-            session_id=self.session_id, reward_space=self.spaces[reward_space].index
-        )
-        return self._get_reward(request).reward
+        return self.spaces[reward_space].update(self.get_cost)
+
+    def reset(self) -> None:
+        for space in self.spaces:
+            space.reset()
+
+    def add_space(self, name: str, space: RewardSpace) -> None:
+        if name in self.spaces:
+            warnings.warn(f"Replacing existing reward space '{name}'")
+        self.spaces[name] = space

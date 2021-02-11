@@ -11,7 +11,6 @@
 
 #include "compiler_gym/envs/llvm/service/ActionSpace.h"
 #include "compiler_gym/envs/llvm/service/ObservationSpaces.h"
-#include "compiler_gym/envs/llvm/service/RewardSpaces.h"
 #include "compiler_gym/service/proto/compiler_gym_service.pb.h"
 #include "compiler_gym/util/EnumUtil.h"
 #include "compiler_gym/util/GrpcStatusMacros.h"
@@ -46,8 +45,6 @@ Status LlvmService::GetSpaces(ServerContext* /* unused */, const GetSpacesReques
   *reply->mutable_action_space_list() = {actionSpaces.begin(), actionSpaces.end()};
   const auto observationSpaces = getLlvmObservationSpaceList();
   *reply->mutable_observation_space_list() = {observationSpaces.begin(), observationSpaces.end()};
-  const auto rewardSpaces = getLlvmRewardSpaceList();
-  *reply->mutable_reward_space_list() = {rewardSpaces.begin(), rewardSpaces.end()};
 
   return Status::OK;
 }
@@ -68,28 +65,28 @@ Status LlvmService::StartEpisode(ServerContext* /* unused */, const StartEpisode
   RETURN_IF_ERROR(util::intToEnum(request->action_space(), &actionSpace));
 
   // Set the eager observation space.
-  std::optional<LlvmObservationSpace> eagerObservation = std::nullopt;
-  if (request->use_eager_observation_space()) {
-    const int32_t index = request->eager_observation_space();
+  std::vector<LlvmObservationSpace> eagerObservationSpaces;
+  eagerObservationSpaces.reserve(request->eager_observation_space_size());
+  for (int i = 0; i < request->eager_observation_space_size(); ++i) {
+    const int32_t index = request->eager_observation_space(i);
     LlvmObservationSpace space;
     RETURN_IF_ERROR(util::intToEnum<LlvmObservationSpace>(index, &space));
-    eagerObservation = space;
-  }
-
-  // Set the eager reward space.
-  std::optional<LlvmRewardSpace> eagerReward = std::nullopt;
-  if (request->use_eager_reward_space()) {
-    const int32_t index = request->eager_reward_space();
-    LlvmRewardSpace space;
-    RETURN_IF_ERROR(util::intToEnum<LlvmRewardSpace>(index, &space));
-    eagerReward = space;
+    eagerObservationSpaces.push_back(space);
   }
 
   // Construct the environment.
   reply->set_session_id(nextSessionId_);
   sessions_[nextSessionId_] = std::make_unique<LlvmEnvironment>(
-      std::move(benchmark), actionSpace, eagerObservation, eagerReward, workingDirectory_);
+      std::move(benchmark), actionSpace, eagerObservationSpaces, workingDirectory_);
+
+  // Compute the initial eager observations.
+  for (const auto eagerObservationSpace : eagerObservationSpaces) {
+    auto observation = reply->add_observation();
+    RETURN_IF_ERROR(sessions_[nextSessionId_]->getObservation(eagerObservationSpace, observation));
+  }
+
   ++nextSessionId_;
+
   return Status::OK;
 }
 
@@ -134,21 +131,6 @@ Status LlvmService::GetObservation(ServerContext* /* unused */, const Observatio
   LlvmObservationSpace space;
   RETURN_IF_ERROR(util::intToEnum(index, &space));
   return environment->getObservation(space, reply);
-}
-
-Status LlvmService::GetReward(ServerContext* /* unused */, const RewardRequest* request,
-                              Reward* reply) {
-  LlvmEnvironment* environment;
-  RETURN_IF_ERROR(session(request->session_id(), &environment));
-
-  const int32_t index = request->reward_space();
-  VLOG(2) << "Step " << environment->actionCount() << " GetReward(" << index << ")";
-
-  LlvmRewardSpace space;
-  RETURN_IF_ERROR(util::intToEnum(index, &space));
-  RETURN_IF_ERROR(environment->getReward(space, reply));
-
-  return Status::OK;
 }
 
 Status LlvmService::AddBenchmark(ServerContext* /* unused */, const AddBenchmarkRequest* request,

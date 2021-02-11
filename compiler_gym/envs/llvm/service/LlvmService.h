@@ -41,9 +41,6 @@ class LlvmService final : public CompilerGymService::Service {
   grpc::Status GetObservation(grpc::ServerContext* context, const ObservationRequest* request,
                               Observation* reply) final override;
 
-  grpc::Status GetReward(grpc::ServerContext* context, const RewardRequest* request,
-                         Reward* reply) final override;
-
   grpc::Status AddBenchmark(grpc::ServerContext* context, const AddBenchmarkRequest* request,
                             AddBenchmarkReply* reply) final override;
 

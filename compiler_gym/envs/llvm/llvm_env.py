@@ -15,7 +15,16 @@ from gym.spaces import Dict as DictSpace
 from compiler_gym.envs.compiler_env import CompilerEnv, step_t
 from compiler_gym.envs.llvm.benchmarks import make_benchmark
 from compiler_gym.envs.llvm.datasets import LLVM_DATASETS
-from compiler_gym.spaces import Commandline, CommandlineFlag, Scalar, Sequence
+from compiler_gym.spaces import (
+    BaselineImprovementNormalizedRewardSpace,
+    Commandline,
+    CommandlineFlag,
+    CostFunctionRewardSpace,
+    NormalizedRewardSpace,
+    RewardSpace,
+    Scalar,
+    Sequence,
+)
 from compiler_gym.third_party.autophase import AUTOPHASE_FEATURE_NAMES
 from compiler_gym.third_party.inst2vec import Inst2vecEncoder
 from compiler_gym.util.runfiles_path import runfiles_path, site_data_path
@@ -135,6 +144,66 @@ class LlvmEnv(CompilerEnv):
                 for name, val in zip(AUTOPHASE_FEATURE_NAMES, base_observation)
             },
         )
+
+    def get_reward_spaces(self) -> List[RewardSpace]:
+        return [
+            CostFunctionRewardSpace(
+                id="IrInstructionCount",
+                cost_function="IrInstructionCount",
+                init_cost_function="IrInstructionCountO0",
+                default_negates_returns=True,
+            ),
+            NormalizedRewardSpace(
+                id="IrInstructionCountNorm",
+                cost_function="IrInstructionCount",
+                init_cost_function="IrInstructionCountO0",
+                default_negates_returns=True,
+            ),
+            BaselineImprovementNormalizedRewardSpace(
+                id="IrInstructionCountO3",
+                cost_function="IrInstructionCount",
+                baseline_cost_function="IrInstructionCountO3",
+                init_cost_function="IrInstructionCountO0",
+                success_threshold=1,
+                default_negates_returns=True,
+            ),
+            BaselineImprovementNormalizedRewardSpace(
+                id="IrInstructionCountOz",
+                cost_function="IrInstructionCount",
+                baseline_cost_function="IrInstructionCountOz",
+                init_cost_function="IrInstructionCountO0",
+                success_threshold=1,
+                default_negates_returns=True,
+            ),
+            CostFunctionRewardSpace(
+                id="ObjectTextSizeBytes",
+                cost_function="ObjectTextSizeBytes",
+                init_cost_function="ObjectTextSizeBytesO0",
+                default_negates_returns=True,
+            ),
+            NormalizedRewardSpace(
+                id="ObjectTextSizeNorm",
+                cost_function="ObjectTextSize",
+                init_cost_function="ObjectTextSizeBytesO0",
+                default_negates_returns=True,
+            ),
+            BaselineImprovementNormalizedRewardSpace(
+                id="ObjectTextSizeO3",
+                cost_function="ObjectTextSize",
+                baseline_cost_function="ObjectTextSizeO3",
+                init_cost_function="ObjectTextSizeBytesO0",
+                success_threshold=1,
+                default_negates_returns=True,
+            ),
+            BaselineImprovementNormalizedRewardSpace(
+                id="ObjectTextSizeOz",
+                cost_function="ObjectTextSize",
+                baseline_cost_function="ObjectTextSizeOz",
+                init_cost_function="ObjectTextSizeBytesO0",
+                success_threshold=1,
+                default_negates_returns=True,
+            ),
+        ]
 
     @staticmethod
     def make_benchmark(*args, **kwargs):
