@@ -274,7 +274,7 @@ class CompilerEnv(gym.Env):
             get_observation=lambda req: self.service(self.service.stub.Step, req),
             spaces=self.service.observation_spaces,
         )
-        self.reward = self._reward_view_type(self.get_reward_spaces() + rewards)
+        self.reward = self._reward_view_type(rewards)
 
         # Lazily evaluated version strings.
         self._versions: Optional[GetVersionReply] = None
@@ -291,9 +291,6 @@ class CompilerEnv(gym.Env):
         self._eager_reward_space: Optional[RewardSpace] = None
         self.observation_space = observation_space
         self.reward_space = reward_space
-
-    def get_reward_spaces(self) -> List[RewardSpace]:
-        return []
 
     @property
     def versions(self) -> GetVersionReply:

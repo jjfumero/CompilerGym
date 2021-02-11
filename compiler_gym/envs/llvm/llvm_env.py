@@ -21,7 +21,6 @@ from compiler_gym.spaces import (
     CommandlineFlag,
     CostFunctionRewardSpace,
     NormalizedRewardSpace,
-    RewardSpace,
     Scalar,
     Sequence,
 )
@@ -73,7 +72,86 @@ class LlvmEnv(CompilerEnv):
     """
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            *args,
+            **kwargs,
+            rewards=[
+                CostFunctionRewardSpace(
+                    id="IrInstructionCount",
+                    cost_function="IrInstructionCount",
+                    init_cost_function="IrInstructionCountO0",
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=False,
+                ),
+                NormalizedRewardSpace(
+                    id="IrInstructionCountNorm",
+                    cost_function="IrInstructionCount",
+                    init_cost_function="IrInstructionCountO0",
+                    max=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=False,
+                ),
+                BaselineImprovementNormalizedRewardSpace(
+                    id="IrInstructionCountO3",
+                    cost_function="IrInstructionCount",
+                    baseline_cost_function="IrInstructionCountO3",
+                    init_cost_function="IrInstructionCountO0",
+                    success_threshold=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=False,
+                ),
+                BaselineImprovementNormalizedRewardSpace(
+                    id="IrInstructionCountOz",
+                    cost_function="IrInstructionCount",
+                    baseline_cost_function="IrInstructionCountOz",
+                    init_cost_function="IrInstructionCountO0",
+                    success_threshold=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=False,
+                ),
+                CostFunctionRewardSpace(
+                    id="ObjectTextSizeBytes",
+                    cost_function="ObjectTextSizeBytes",
+                    init_cost_function="ObjectTextSizeO0",
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=True,
+                ),
+                NormalizedRewardSpace(
+                    id="ObjectTextSizeNorm",
+                    cost_function="ObjectTextSizeBytes",
+                    init_cost_function="ObjectTextSizeO0",
+                    max=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=True,
+                ),
+                BaselineImprovementNormalizedRewardSpace(
+                    id="ObjectTextSizeO3",
+                    cost_function="ObjectTextSizeBytes",
+                    init_cost_function="ObjectTextSizeO0",
+                    baseline_cost_function="ObjectTextSizeO3",
+                    success_threshold=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=True,
+                ),
+                BaselineImprovementNormalizedRewardSpace(
+                    id="ObjectTextSizeOz",
+                    cost_function="ObjectTextSizeBytes",
+                    init_cost_function="ObjectTextSizeO0",
+                    baseline_cost_function="ObjectTextSizeOz",
+                    success_threshold=1,
+                    default_negates_returns=True,
+                    deterministic=True,
+                    platform_dependent=True,
+                ),
+            ],
+        )
         self.actions: List[int] = []
         self.datasets_site_path = site_data_path("llvm/10.0.0/bitcode_benchmarks")
 
@@ -144,84 +222,6 @@ class LlvmEnv(CompilerEnv):
                 for name, val in zip(AUTOPHASE_FEATURE_NAMES, base_observation)
             },
         )
-
-    def get_reward_spaces(self) -> List[RewardSpace]:
-        return [
-            CostFunctionRewardSpace(
-                id="IrInstructionCount",
-                cost_function="IrInstructionCount",
-                init_cost_function="IrInstructionCountO0",
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=False,
-            ),
-            NormalizedRewardSpace(
-                id="IrInstructionCountNorm",
-                cost_function="IrInstructionCount",
-                init_cost_function="IrInstructionCountO0",
-                max=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=False,
-            ),
-            BaselineImprovementNormalizedRewardSpace(
-                id="IrInstructionCountO3",
-                cost_function="IrInstructionCount",
-                baseline_cost_function="IrInstructionCountO3",
-                init_cost_function="IrInstructionCountO0",
-                success_threshold=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=False,
-            ),
-            BaselineImprovementNormalizedRewardSpace(
-                id="IrInstructionCountOz",
-                cost_function="IrInstructionCount",
-                baseline_cost_function="IrInstructionCountOz",
-                init_cost_function="IrInstructionCountO0",
-                success_threshold=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=False,
-            ),
-            CostFunctionRewardSpace(
-                id="ObjectTextSizeBytes",
-                cost_function="ObjectTextSizeBytes",
-                init_cost_function="ObjectTextSizeO0",
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=True,
-            ),
-            NormalizedRewardSpace(
-                id="ObjectTextSizeNorm",
-                cost_function="ObjectTextSizeBytes",
-                init_cost_function="ObjectTextSizeO0",
-                max=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=True,
-            ),
-            BaselineImprovementNormalizedRewardSpace(
-                id="ObjectTextSizeO3",
-                cost_function="ObjectTextSizeBytes",
-                init_cost_function="ObjectTextSizeO0",
-                baseline_cost_function="ObjectTextSizeO3",
-                success_threshold=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=True,
-            ),
-            BaselineImprovementNormalizedRewardSpace(
-                id="ObjectTextSizeOz",
-                cost_function="ObjectTextSizeBytes",
-                init_cost_function="ObjectTextSizeO0",
-                baseline_cost_function="ObjectTextSizeOz",
-                success_threshold=1,
-                default_negates_returns=True,
-                deterministic=True,
-                platform_dependent=True,
-            ),
-        ]
 
     @staticmethod
     def make_benchmark(*args, **kwargs):
